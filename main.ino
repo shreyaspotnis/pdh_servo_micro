@@ -43,8 +43,8 @@ bool s5_state = LOW;
 
 int dac_center = 32768; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
-int dac_scan_range = 10000;  // scan range
-int dac_scan_step = 10;
+int dac_scan_range = 15000;  // scan range
+int dac_scan_step = 15;
 int dac_scan_value = -dac_scan_range;
 
 void setup() {
