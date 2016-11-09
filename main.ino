@@ -43,8 +43,8 @@ bool s5_state = LOW;
 
 int dac_center = 32768; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
-int dac_scan_range = 5000;  // scan range
-int dac_scan_step = 50;
+int dac_scan_range = 10000;  // scan range
+int dac_scan_step = 10;
 int dac_scan_value = -dac_scan_range;
 
 void setup() {
@@ -90,7 +90,7 @@ void setup() {
     update_dac(dac_word);
 
     // Register the dac_word variable so that it can be accessed from the cloud
-    Particle.variable("dac_word", dac_word);
+    // Particle.variable("dac_word", dac_word);
 
     Particle.connect();
 }
@@ -123,7 +123,10 @@ void loop() {
     bool ds1_state = digitalRead(DS1);
     if(s5_state != ds1_state) {
         s5_state = ds1_state;
-        digitalWrite(S5_piezo_int, s5_state);
+        if(ds1_state)
+            Particle.connect();
+        else
+            Particle.disconnect();
     }
 
     bool ds2_state = digitalRead(DS2);
