@@ -32,7 +32,7 @@ int S6_piezo_offset = D1;
 int DS1 = D7;
 int LDAC_ = D6;
 
-uint8_t test = 0x0000;
+uint16_t dac_word = 0x0000;
 
 void setup() {
     pinMode(DS1, INPUT);
@@ -43,22 +43,42 @@ void setup() {
     pinMode(S2_curr_int, OUTPUT);
     pinMode(S3_output_enable, OUTPUT);
 
-
     pinMode(S4_piezo_enable, OUTPUT);
     pinMode(S5_piezo_int, OUTPUT);
     pinMode(S6_piezo_offset, OUTPUT);
 
     pinMode(LDAC_, OUTPUT);
+    digitalWrite(S1_input, LOW);
+    digitalWrite(S2_curr_int, LOW);
+    digitalWrite(S3_output_enable, LOW);
+    digitalWrite(S4_piezo_enable, LOW);
+    digitalWrite(S5_piezo_int, LOW);
+    digitalWrite(S6_piezo_offset, LOW);
+
+    // Keep this high to test out the piezo channel
+    digitalWrite(S6_piezo_offset, HIGH);
 
     SPI1.setBitOrder(MSBFIRST);
     SPI1.setClockSpeed(15, MHZ);
     SPI1.begin();
 
-    digitalWrite(LDAC_, LOW);
-    SPI1.transfer(
+    Serial.begin(9600);
+    update_dac(0xFF00);
+}
 
+void update_dac(uint16_t dac_word_) {
+    uint8_t msbyte = dac_word_ >> 8;
+    uint8_t lsbyte = dac_word_ & 0x00FF;
+
+    digitalWrite(LDAC_, LOW);
+    digitalWrite(D5, HIGH);
+    digitalWrite(D5, LOW);
+    SPI1.transfer(msbyte);
+    SPI1.transfer(lsbyte);
+    digitalWrite(D5, HIGH);
 }
 
 void loop() {
 
 }
+

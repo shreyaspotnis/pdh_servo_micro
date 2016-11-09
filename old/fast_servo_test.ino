@@ -32,8 +32,7 @@ int S6_piezo_offset = D1;
 int DS1 = D7;
 int LDAC_ = D6;
 
-uint8_t test_upper = 0x80;
-uint8_t test_lower = 0x00;
+uint16_t dac_word = 0x0000;
 
 void setup() {
     pinMode(DS1, INPUT);
@@ -44,26 +43,59 @@ void setup() {
     pinMode(S2_curr_int, OUTPUT);
     pinMode(S3_output_enable, OUTPUT);
 
-
     pinMode(S4_piezo_enable, OUTPUT);
     pinMode(S5_piezo_int, OUTPUT);
     pinMode(S6_piezo_offset, OUTPUT);
 
     pinMode(LDAC_, OUTPUT);
+    digitalWrite(S1_input, LOW);
+    digitalWrite(S2_curr_int, LOW);
+    digitalWrite(S3_output_enable, LOW);
+    digitalWrite(S4_piezo_enable, LOW);
+    digitalWrite(S5_piezo_int, LOW);
+    digitalWrite(S6_piezo_offset, LOW);
+
+    digitalWrite(S6_piezo_offset, LOW);
 
     SPI1.setBitOrder(MSBFIRST);
     SPI1.setClockSpeed(15, MHZ);
     SPI1.begin();
+
+    Serial.begin(9600);
+}
+
+void update_dac(uint16_t dac_word) {
+    uint8_t msbyte = dac_word >> 8;
+    uint8_t lsbyte = dac_word && 0xFF;
+
     digitalWrite(LDAC_, LOW);
     digitalWrite(D5, HIGH);
-    
     digitalWrite(D5, LOW);
-    SPI1.transfer(test_upper);
-    SPI1.transfer(test_lower);
+    SPI1.transfer(msbyte);
+    SPI1.transfer(lsbyte);
     digitalWrite(D5, HIGH);
-
 }
 
 void loop() {
 
+    if(digitalRead(DS3)) {
+        update_dac(dac_word);
+        dac_word += 0x0100;
+        int pz_mon = analogRead(pz_out_buffer);
+        delay(1);
+        Serial.printf("%d %d\r\n", dac_word, pz_mon);
+    }
+
+    if(digitalRead(DS1)) {
+        digitalWrite(S5_piezo_int, HIGH);
+    }
+    else {
+        digitalWrite(S5_piezo_int, LOW);
+    }
+    if(digitalRead(DS2)) {
+        digitalWrite(S2_curr_int, HIGH);
+    }
+    else {
+        digitalWrite(S2_curr_int, LOW);
+    }
 }
