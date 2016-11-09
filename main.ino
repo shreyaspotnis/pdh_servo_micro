@@ -19,6 +19,8 @@
 // 19   D6              LDAC_               Digital Out
 // 20   D7              DS1                 Digital In
 
+// Semi-automatic mode ensures that we run setup() before attempting to
+// connect to the cloud.
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int DS3 = WKP;
@@ -35,19 +37,27 @@ int DS1 = D7;
 int LDAC_ = D6;
 int SS_SPI = D5;
 
+// Global variables
 bool s2_state = LOW;
 bool s5_state = LOW;
 
-uint16_t dac_word = 0x0000;
+int dac_center = 32768; // center value around which to scan
+int dac_word = dac_center;  // actual dac value written
+int dac_scan_range = 5000;  // scan range
+int dac_scan_step = 50;
+int dac_scan_value = -dac_scan_range;
 
 void setup() {
+    // Read the analog pins once to set them to input mode
     analogRead(transmission);
     analogRead(pz_out_buffer);
 
+    // Set the manual toggle switches to input mode
     pinMode(DS1, INPUT);
     pinMode(DS2, INPUT);
     pinMode(DS3, INPUT);
 
+    // set the analog switch lines to digital output
     pinMode(S1_input, OUTPUT);
     pinMode(S2_curr_int, OUTPUT);
     pinMode(S3_output_enable, OUTPUT);
@@ -56,11 +66,14 @@ void setup() {
     pinMode(S5_piezo_int, OUTPUT);
     pinMode(S6_piezo_offset, OUTPUT);
 
+    // Set the DAC latch (LDAC_) and chip select (SS_SPI) pins to ditigal output
     pinMode(LDAC_, OUTPUT);
-    digitalWrite(LDAC_, HIGH); // The serial register is not latched with LDAC_ is HIGH
     pinMode(SS_SPI, OUTPUT);
-    digitalWrite(SS_SPI, HIGH);  // HIGH disables the DAC
+    digitalWrite(LDAC_, HIGH); // The serial register is not latched with LDAC_ is HIGH
+    digitalWrite(SS_SPI, HIGH);  // HIGH disables the DAC, it ignores the clock
+                                 // and data lines
 
+    // Start with all the analog switches closed
     digitalWrite(S1_input, LOW);
     digitalWrite(S2_curr_int, s2_state);
     digitalWrite(S3_output_enable, LOW);
@@ -68,23 +81,23 @@ void setup() {
     digitalWrite(S5_piezo_int, s5_state);
     digitalWrite(S6_piezo_offset, LOW);
 
-    digitalWrite(S6_piezo_offset, LOW);
-
-
 
     SPI1.setBitOrder(MSBFIRST);
-    SPI1.setClockSpeed(40, MHZ);
+    SPI1.setClockSpeed(10, MHZ);
     SPI1.begin();
 
-    Serial.begin(9600);
-    update_dac(0x8000);
+    // Set the DAC output to midscale
+    update_dac(dac_word);
+
+    // Register the dac_word variable so that it can be accessed from the cloud
+    Particle.variable("dac_word", dac_word);
 
     Particle.connect();
 }
 
-void update_dac(uint16_t dac_word) {
-    uint8_t msbyte = dac_word >> 8;
-    uint8_t lsbyte = dac_word && 0xFF;
+void update_dac(uint16_t dac_word_) {
+    uint8_t msbyte = dac_word_ >> 8;
+    uint8_t lsbyte = dac_word_ && 0xFF;
 
     //digitalWrite(LDAC_, LOW);
     digitalWrite(SS_SPI, LOW);
@@ -96,13 +109,15 @@ void update_dac(uint16_t dac_word) {
 }
 
 void loop() {
-    // if(digitalRead(DS3)) {
-    if(true) {
-        dac_word += 0x0100;
-        //update_dac(dac_word);
-        update_dac(0x8000);
-        int pz_mon = analogRead(pz_out_buffer);
-        Serial.printf("%d %d\r\n", dac_word, pz_mon);
+    update_dac(dac_word);
+    if(digitalRead(DS3)) {
+        dac_scan_value += dac_scan_step;
+        if(dac_scan_value >= dac_scan_range)
+            dac_scan_value = -dac_scan_range;
+        dac_word = dac_center + dac_scan_value;
+    }
+    else {
+        dac_word = dac_center;
     }
 
     bool ds1_state = digitalRead(DS1);
