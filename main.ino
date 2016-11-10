@@ -44,8 +44,8 @@ int LDAC_ = D6;
 int SS_SPI = D5;
 
 int dac_center_default = 32768;
-int dac_scan_range_default = 15000;  // scan range
-int dac_scan_step_default = 50;
+int dac_scan_range_default = 30000;  // scan range
+int dac_scan_step_default = 100;
 
 int dac_center = 32768; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
@@ -158,7 +158,7 @@ void loop() {
             dac_scan_value = -dac_scan_range;
         dac_word = dac_center + dac_scan_value;
     }
-    else {
+    else if(ds3_state == LOW) {
         dac_word = dac_center;
     }
     update_dac(dac_word);
