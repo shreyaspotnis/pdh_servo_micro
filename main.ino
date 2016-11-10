@@ -19,6 +19,11 @@
 // 19   D6              LDAC_               Digital Out
 // 20   D7              DS1                 Digital In
 
+// Uses of toggle switches
+// DS1 switches wifi on or off
+// DS2 enables locking
+// DS3 enables piezo scanning
+
 // Semi-automatic mode ensures that we run setup() before attempting to
 // connect to the cloud.
 SYSTEM_MODE(SEMI_AUTOMATIC);
@@ -37,15 +42,19 @@ int DS1 = D7;
 int LDAC_ = D6;
 int SS_SPI = D5;
 
-// Global variables
-bool s2_state = LOW;
-bool s5_state = LOW;
-
 int dac_center = 32768; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
 int dac_scan_range = 15000;  // scan range
-int dac_scan_step = 15;
+int dac_scan_step = 50;
 int dac_scan_value = -dac_scan_range;
+
+int transmission_threshold = 50;  // counts
+
+
+// globals
+bool ds1_state;
+bool ds2_state;
+bool ds3_state;
 
 void setup() {
     // Read the analog pins once to set them to input mode
@@ -75,11 +84,16 @@ void setup() {
 
     // Start with all the analog switches closed
     digitalWrite(S1_input, LOW);
-    digitalWrite(S2_curr_int, s2_state);
+    digitalWrite(S2_curr_int, LOW);
     digitalWrite(S3_output_enable, LOW);
     digitalWrite(S4_piezo_enable, LOW);
-    digitalWrite(S5_piezo_int, s5_state);
+    digitalWrite(S5_piezo_int, LOW);
     digitalWrite(S6_piezo_offset, LOW);
+
+    // read positions of switches
+    ds1_state = digitalRead(DS1);
+    ds2_state = digitalRead(DS2);
+    ds3_state = digitalRead(DS3);
 
 
     SPI1.setBitOrder(MSBFIRST);
@@ -109,8 +123,18 @@ void update_dac(uint16_t dac_word_) {
 }
 
 void loop() {
-    update_dac(dac_word);
-    if(digitalRead(DS3)) {
+    // Check whether DS1 switch has been flipped.
+    bool ds1_state_new = digitalRead(DS1);
+    if(ds1_state_new != ds1_state) {
+        ds1_state = ds1_state_new;
+        if(ds1_state)
+            Particle.connect();
+        else
+            Particle.disconnect();
+    }
+
+    ds3_state = digitalRead(DS3);
+    if(ds3_state) {
         dac_scan_value += dac_scan_step;
         if(dac_scan_value >= dac_scan_range)
             dac_scan_value = -dac_scan_range;
@@ -119,20 +143,22 @@ void loop() {
     else {
         dac_word = dac_center;
     }
+    update_dac(dac_word);
 
-    bool ds1_state = digitalRead(DS1);
-    if(s5_state != ds1_state) {
-        s5_state = ds1_state;
-        if(ds1_state)
-            Particle.connect();
-        else
-            Particle.disconnect();
+
+    bool ds2_state_new = digitalRead(DS2);
+    ds2_state = ds2_state_new;
+    int trans = analogRead(transmission);
+    // if(trans > transmission_threshold)
+    if(ds2_state) {
+        digitalWrite(S2_curr_int, HIGH);
+        digitalWrite(S5_piezo_int, HIGH);
     }
-
-    bool ds2_state = digitalRead(DS2);
-    if(s2_state != ds2_state) {
-        s2_state = ds2_state;
-        digitalWrite(S2_curr_int, s2_state);
+    else {
+        digitalWrite(S2_curr_int, LOW);
+        digitalWrite(S5_piezo_int, LOW);
     }
-
+    //if(ds2_state_new != ds2_state) {
+    //    ds2_state = ds2_state_new;
+    //}
 }
