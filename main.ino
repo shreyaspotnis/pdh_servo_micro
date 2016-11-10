@@ -26,6 +26,7 @@
 
 // Semi-automatic mode ensures that we run setup() before attempting to
 // connect to the cloud.
+STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int DS3 = WKP;
@@ -42,19 +43,30 @@ int DS1 = D7;
 int LDAC_ = D6;
 int SS_SPI = D5;
 
+int dac_center_default = 32768;
+int dac_scan_range_default = 15000;  // scan range
+int dac_scan_step_default = 50;
+
 int dac_center = 32768; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
-int dac_scan_range = 15000;  // scan range
-int dac_scan_step = 50;
+int dac_scan_range = dac_scan_range_default;  // scan range
+int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
-int transmission_threshold = 50;  // counts
+int transmission_threshold = 40;  // counts
+int trans_global = 0;
 
 
 // globals
 bool ds1_state;
 bool ds2_state;
 bool ds3_state;
+int lock_state;
+
+#define LOCK_NOT_ATTEMPTING 0x00
+#define LOCK_NOT_ACQUIRED   0x01
+#define LOCK_ACQUIRED       0x02
+
 
 void setup() {
     // Read the analog pins once to set them to input mode
@@ -105,8 +117,11 @@ void setup() {
 
     // Register the dac_word variable so that it can be accessed from the cloud
     // Particle.variable("dac_word", dac_word);
+    Particle.variable("trans_global", trans_global);
 
     Particle.connect();
+
+    lock_state = LOCK_NOT_ATTEMPTING;
 }
 
 void update_dac(uint16_t dac_word_) {
@@ -127,14 +142,17 @@ void loop() {
     bool ds1_state_new = digitalRead(DS1);
     if(ds1_state_new != ds1_state) {
         ds1_state = ds1_state_new;
-        if(ds1_state)
+        if(ds1_state) {
             Particle.connect();
-        else
+        }
+        else {
             Particle.disconnect();
+        }
     }
 
     ds3_state = digitalRead(DS3);
-    if(ds3_state) {
+    // scan if switch is on and lock has not been acquired
+    if(ds3_state == HIGH && lock_state!=LOCK_ACQUIRED) {
         dac_scan_value += dac_scan_step;
         if(dac_scan_value >= dac_scan_range)
             dac_scan_value = -dac_scan_range;
@@ -146,11 +164,19 @@ void loop() {
     update_dac(dac_word);
 
 
-    bool ds2_state_new = digitalRead(DS2);
-    ds2_state = ds2_state_new;
-    int trans = analogRead(transmission);
-    // if(trans > transmission_threshold)
-    if(ds2_state) {
+    // attempt locking only if ds2 is high
+    bool ds2_state = digitalRead(DS2);
+    if(ds2_state == HIGH)
+        lock_state = LOCK_NOT_ACQUIRED;
+    else
+        lock_state = LOCK_NOT_ATTEMPTING;
+
+    // check if transmission exceeds threshold
+    trans_global = analogRead(transmission);
+    if(trans_global > transmission_threshold && lock_state!=LOCK_NOT_ATTEMPTING)
+        lock_state = LOCK_ACQUIRED;
+
+    if(lock_state==LOCK_ACQUIRED) {
         digitalWrite(S2_curr_int, HIGH);
         digitalWrite(S5_piezo_int, HIGH);
     }
@@ -158,7 +184,4 @@ void loop() {
         digitalWrite(S2_curr_int, LOW);
         digitalWrite(S5_piezo_int, LOW);
     }
-    //if(ds2_state_new != ds2_state) {
-    //    ds2_state = ds2_state_new;
-    //}
 }
