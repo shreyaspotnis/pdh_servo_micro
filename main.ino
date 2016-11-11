@@ -53,7 +53,8 @@ int dac_scan_range = dac_scan_range_default;  // scan range
 int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
-int transmission_threshold = 40;  // counts
+int transmission_threshold = 30;  // counts
+int transmission_threshold_max = 50;  // counts
 int trans_global = 0;
 
 
@@ -158,6 +159,7 @@ void loop() {
             dac_scan_value = -dac_scan_range;
         dac_word = dac_center + dac_scan_value;
     }
+    // if scanning has been switched off, then recenter
     else if(ds3_state == LOW) {
         dac_word = dac_center;
     }
@@ -173,7 +175,9 @@ void loop() {
 
     // check if transmission exceeds threshold
     trans_global = analogRead(transmission);
-    if(trans_global > transmission_threshold && lock_state!=LOCK_NOT_ATTEMPTING)
+    bool lock_condition = (trans_global > transmission_threshold)
+                          && (trans_global < transmission_threshold_max);
+    if(lock_condition && lock_state!=LOCK_NOT_ATTEMPTING)
         lock_state = LOCK_ACQUIRED;
 
     if(lock_state==LOCK_ACQUIRED) {
