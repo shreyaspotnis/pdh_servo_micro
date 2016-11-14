@@ -27,6 +27,7 @@
 // Semi-automatic mode ensures that we run setup() before attempting to
 // connect to the cloud.
 STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
+SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int DS3 = WKP;
@@ -54,7 +55,7 @@ int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
 int transmission_threshold = 30;  // counts
-int transmission_threshold_max = 50;  // counts
+int transmission_threshold_max = 60;  // counts
 int trans_global = 0;
 
 
@@ -110,7 +111,7 @@ void setup() {
 
 
     SPI1.setBitOrder(MSBFIRST);
-    SPI1.setClockSpeed(10, MHZ);
+    SPI1.setClockSpeed(2, MHZ);
     SPI1.begin();
 
     // Set the DAC output to midscale
@@ -119,6 +120,7 @@ void setup() {
     // Register the dac_word variable so that it can be accessed from the cloud
     // Particle.variable("dac_word", dac_word);
     Particle.variable("trans_global", trans_global);
+    Particle.variable("lock_state", lock_state);
 
     Particle.connect();
 
@@ -127,12 +129,12 @@ void setup() {
 
 void update_dac(uint16_t dac_word_) {
     uint8_t msbyte = dac_word_ >> 8;
-    uint8_t lsbyte = dac_word_ && 0xFF;
+    uint8_t lsbyte = dac_word_ & 0xFF;
 
     //digitalWrite(LDAC_, LOW);
     digitalWrite(SS_SPI, LOW);
     SPI1.transfer(msbyte);
-    SPI1.transfer(lsbyte);
+    vvSPI1.transfer(lsbyte);
     digitalWrite(SS_SPI, HIGH);
     digitalWrite(LDAC_, LOW);
     digitalWrite(LDAC_, HIGH);
