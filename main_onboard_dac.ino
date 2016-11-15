@@ -90,6 +90,10 @@ void setup() {
     analogRead(transmission);
     analogRead(pz_out_buffer);
 
+    // Set the onboard 12 bit DAC to output
+    pinMode(DAC1, OUTPUT);
+    analogWrite(DAC1, 2048);  // set DAC to mid-scale
+
     // Set the manual toggle switches to input mode
     pinMode(DS1, INPUT);
     pinMode(DS2, INPUT);
@@ -104,7 +108,7 @@ void setup() {
     pinMode(S5_piezo_int, OUTPUT);
     pinMode(S6_piezo_offset, OUTPUT);
 
-    pinMode(DAC1, OUTPUT);
+
 
     // Start with all the analog switches closed
     digitalWrite(S1_input, LOW);
@@ -119,14 +123,15 @@ void setup() {
     ds2_state = digitalRead(DS2);
     ds3_state = digitalRead(DS3);
 
+    if(ds1_state==HIGH) {
+        WiFi.on();
+        Particle.connect();
+    }
+    else {
+        WiFi.off();
+        Particle.disconnect();
 
-    // Register the dac_word variable so that it can be accessed from the cloud
-    // Particle.variable("dac_word", dac_word);
-    Particle.variable("trans_global", trans_global);
-    Particle.variable("lock_state", lock_state);
-
-    Particle.connect();
-
+    }
     lock_state = LOCK_NOT_ATTEMPTING;
 }
 
@@ -140,8 +145,8 @@ void loop() {
             Particle.connect();
         }
         else {
-            WiFi.off();
             Particle.disconnect();
+            WiFi.off();
         }
     }
 
