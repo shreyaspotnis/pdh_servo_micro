@@ -1,9 +1,23 @@
 // Code for the laser servo controller
+// This version is meant for a modified servo controller, where the external
+// AD5541A DAC is ditched in favor of the onboard 12 bit DAC.
 
+// The following changes were made on the board:
+// - The AD5541A chip was removed
+// - The output of the DAC pin on the photon was heavily low pass filtered,
+//   using a 15kOhm, and 1uF||0.1uF RC filter to get a ~20Hz cutoff frequency, and
+//   then jumpered to the output test point of the original DAC chip.
+// - The external flip switch S2 was originally connected to the DAC pin on the
+//   photon. This connection was removed by de-soldering the output pin of S2,
+//   and bending it out of the board. Since the digital output pins that were
+//   controlling the original DAC were freed up, the output of S2 was connected
+//   to D6. Previously, D6 was connected to the LDAC_ latch pin of the external
+//   DAC.
+
+// After all these modifications, here's the update pin configuration:
 // PIN configuration
 // PIN# PIN_name        Connection          Type
 // 5    WKUP            DS3                 Digital In
-// 6    DAC             DS2                 Digital In
 // 7    A5              S3_output_enable    Digital Out
 // 8    A4              S2_curr_int         Digital Out
 // 9    A3              S1_input            Digital Out
@@ -13,25 +27,27 @@
 // 13   D0              S5_piezo_int        Digital Out
 // 14   D1              S6_piezo_offset     Ditigal Out
 // -----------------------------------------------------
-// 15   D2              MOSI_SPI            Digital Out
-// 17   D4              SCK_SPI             Digital Out
-// 18   D5              SS_SPI              Digital Out
-// 19   D6              LDAC_               Digital Out
+// 19   D6              DS2                 Digital In
 // 20   D7              DS1                 Digital In
 
 // Uses of toggle switches
 // DS1 switches wifi on or off
-// DS2 enables locking
+// DS2 enables smart locking. If transmission through the cavity is detected,
+// then switches to the integrators are opened.
 // DS3 enables piezo scanning
 
+
+STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
+
+// System code is run in a separate thread. This makes the loop() code run
+// much faster.
+SYSTEM_THREAD(ENABLED);
 // Semi-automatic mode ensures that we run setup() before attempting to
 // connect to the cloud.
-STARTUP(WiFi.selectAntenna(ANT_EXTERNAL));
-SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int DS3 = WKP;
-int DS2 = DAC;
+int DS2 = D6;
 int S3_output_enable = A5;
 int S2_curr_int = A4;
 int S1_input = A3;
@@ -41,21 +57,20 @@ int transmission = A0;
 int S5_piezo_int = D0;
 int S6_piezo_offset = D1;
 int DS1 = D7;
-int LDAC_ = D6;
 int SS_SPI = D5;
 
-int dac_center_default = 32768;
-int dac_scan_range_default = 30000;  // scan range
-int dac_scan_step_default = 100;
+int dac_center_default = 2048;
+int dac_scan_range_default = 100;  // scan range
+int dac_scan_step_default = 1;
 
-int dac_center = 32768; // center value around which to scan
+int dac_center = dac_center_default; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
 int dac_scan_range = dac_scan_range_default;  // scan range
 int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
-int transmission_threshold = 30;  // counts
-int transmission_threshold_max = 60;  // counts
+int transmission_threshold = 35;  // counts
+int transmission_threshold_max = 100;  // counts
 int trans_global = 0;
 
 
@@ -89,12 +104,7 @@ void setup() {
     pinMode(S5_piezo_int, OUTPUT);
     pinMode(S6_piezo_offset, OUTPUT);
 
-    // Set the DAC latch (LDAC_) and chip select (SS_SPI) pins to ditigal output
-    pinMode(LDAC_, OUTPUT);
-    pinMode(SS_SPI, OUTPUT);
-    digitalWrite(LDAC_, HIGH); // The serial register is not latched with LDAC_ is HIGH
-    digitalWrite(SS_SPI, HIGH);  // HIGH disables the DAC, it ignores the clock
-                                 // and data lines
+    pinMode(DAC1, OUTPUT);
 
     // Start with all the analog switches closed
     digitalWrite(S1_input, LOW);
@@ -110,13 +120,6 @@ void setup() {
     ds3_state = digitalRead(DS3);
 
 
-    SPI1.setBitOrder(MSBFIRST);
-    SPI1.setClockSpeed(2, MHZ);
-    SPI1.begin();
-
-    // Set the DAC output to midscale
-    update_dac(dac_word);
-
     // Register the dac_word variable so that it can be accessed from the cloud
     // Particle.variable("dac_word", dac_word);
     Particle.variable("trans_global", trans_global);
@@ -127,29 +130,18 @@ void setup() {
     lock_state = LOCK_NOT_ATTEMPTING;
 }
 
-void update_dac(uint16_t dac_word_) {
-    uint8_t msbyte = dac_word_ >> 8;
-    uint8_t lsbyte = dac_word_ & 0xFF;
-
-    //digitalWrite(LDAC_, LOW);
-    digitalWrite(SS_SPI, LOW);
-    SPI1.transfer(msbyte);
-    SPI1.transfer(lsbyte);
-    digitalWrite(SS_SPI, HIGH);
-    digitalWrite(LDAC_, LOW);
-    digitalWrite(LDAC_, HIGH);
-}
-
 void loop() {
     // Check whether DS1 switch has been flipped.
     bool ds1_state_new = digitalRead(DS1);
     if(ds1_state_new != ds1_state) {
         ds1_state = ds1_state_new;
         if(ds1_state) {
+            WiFi.on();
             Particle.connect();
         }
         else {
-            // Particle.disconnect();
+            WiFi.off();
+            Particle.disconnect();
         }
     }
 
@@ -160,20 +152,25 @@ void loop() {
         if(dac_scan_value >= dac_scan_range)
             dac_scan_value = -dac_scan_range;
         dac_word = dac_center + dac_scan_value;
+        delay(1);
     }
     // if scanning has been switched off, then recenter
     else if(ds3_state == LOW) {
         dac_word = dac_center;
     }
-    update_dac(dac_word);
+
+    if(lock_state != LOCK_ACQUIRED)
+        analogWrite(DAC1, dac_word);
 
 
     // attempt locking only if ds2 is high
     bool ds2_state = digitalRead(DS2);
-    if(ds2_state == HIGH)
+    if(ds2_state == HIGH) {
         lock_state = LOCK_NOT_ACQUIRED;
-    else
+    }
+    else {
         lock_state = LOCK_NOT_ATTEMPTING;
+    }
 
     // check if transmission exceeds threshold
     trans_global = analogRead(transmission);
@@ -184,7 +181,7 @@ void loop() {
 
     if(lock_state==LOCK_ACQUIRED) {
         digitalWrite(S2_curr_int, HIGH);
-        digitalWrite(S5_piezo_int, HIGH);
+        // digitalWrite(S5_piezo_int, HIGH);
     }
     else {
         digitalWrite(S2_curr_int, LOW);
