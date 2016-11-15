@@ -186,7 +186,7 @@ void loop() {
 
     if(lock_state==LOCK_ACQUIRED) {
         digitalWrite(S2_curr_int, HIGH);
-        // digitalWrite(S5_piezo_int, HIGH);
+        digitalWrite(S5_piezo_int, HIGH);
     }
     else {
         digitalWrite(S2_curr_int, LOW);
