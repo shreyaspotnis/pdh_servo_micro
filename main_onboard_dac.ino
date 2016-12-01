@@ -60,8 +60,8 @@ int DS1 = D7;
 int SS_SPI = D5;
 
 int dac_center_default = 2048;
-int dac_scan_range_default = 100;  // scan range
-int dac_scan_step_default = 1;
+int dac_scan_range_default = 150;  // scan range
+int dac_scan_step_default = 2;
 
 int dac_center = dac_center_default; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
@@ -69,8 +69,8 @@ int dac_scan_range = dac_scan_range_default;  // scan range
 int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
-int transmission_threshold = 35;  // counts
-int transmission_threshold_max = 100;  // counts
+int transmission_threshold = 30;  // counts
+int transmission_threshold_max = 200;  // counts
 int trans_global = 0;
 
 
@@ -78,8 +78,9 @@ int trans_global = 0;
 bool ds1_state;
 bool ds2_state;
 bool ds3_state;
-int lock_state;
 
+int lock_state;
+// lock state can be in any of the following
 #define LOCK_NOT_ATTEMPTING 0x00
 #define LOCK_NOT_ACQUIRED   0x01
 #define LOCK_ACQUIRED       0x02
@@ -154,42 +155,68 @@ void loop() {
     // scan if switch is on and lock has not been acquired
     if(ds3_state == HIGH && lock_state!=LOCK_ACQUIRED) {
         dac_scan_value += dac_scan_step;
-        if(dac_scan_value >= dac_scan_range)
+        if(dac_scan_value >= dac_scan_range) {
+            // this is the end of one scan cycle
+            if(lock_state==LOCK_NOT_ACQUIRED) {
+                // we are still searching for the transmission and did not
+                // find it in this range, hence widen the scan range
+                dac_scan_range *=2;
+                if(dac_scan_value > 1000) {
+                    // do not exceed half range
+                    dac_scan_range = 1000;
+                }
+            }
             dac_scan_value = -dac_scan_range;
+        }
         dac_word = dac_center + dac_scan_value;
         delay(1);
     }
     // if scanning has been switched off, then recenter
     else if(ds3_state == LOW) {
         dac_word = dac_center;
+        dac_scan_range = dac_scan_range_default;
     }
 
+    // update DAC only when scanning. Since writing to DAC introduces
+    // glitches in the output voltage, we avoid it when the laser is locked
     if(lock_state != LOCK_ACQUIRED)
         analogWrite(DAC1, dac_word);
 
-
+    // check if transmission exceeds threshold
+    // set state to LOCK_ACQUIRED if it does and if we want to lock
+    trans_global = analogRead(transmission);
+    bool lock_condition = (trans_global > transmission_threshold)
+                          && (trans_global < transmission_threshold_max);
+    if(lock_condition == false && lock_state==LOCK_ACQUIRED) {
+        // we just lost lock in this round
+        // start with a small scan range
+        dac_scan_range = 8;
+    }
     // attempt locking only if ds2 is high
+    // start with assumption that lock has not been acquired
     bool ds2_state = digitalRead(DS2);
     if(ds2_state == HIGH) {
         lock_state = LOCK_NOT_ACQUIRED;
     }
     else {
         lock_state = LOCK_NOT_ATTEMPTING;
+        // reset the scan range if we don't want to attempt locking
+        dac_scan_range = dac_scan_range_default;
     }
 
-    // check if transmission exceeds threshold
-    trans_global = analogRead(transmission);
-    bool lock_condition = (trans_global > transmission_threshold)
-                          && (trans_global < transmission_threshold_max);
     if(lock_condition && lock_state!=LOCK_NOT_ATTEMPTING)
         lock_state = LOCK_ACQUIRED;
 
     if(lock_state==LOCK_ACQUIRED) {
         digitalWrite(S2_curr_int, HIGH);
         digitalWrite(S5_piezo_int, HIGH);
+        dac_scan_range = dac_scan_range_default;
     }
     else {
         digitalWrite(S2_curr_int, LOW);
         digitalWrite(S5_piezo_int, LOW);
     }
+    // turn of input temporarily
+    //digitalWrite(S1_input, HIGH);
+    //digitalWrite(S4_piezo_enable, HIGH);
 }
