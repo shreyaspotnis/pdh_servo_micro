@@ -60,8 +60,8 @@ int DS1 = D7;
 int SS_SPI = D5;
 
 int dac_center_default = 2048;
-int dac_scan_range_default = 150;  // scan range
-int dac_scan_step_default = 2;
+int dac_scan_range_default = 100;  // scan range
+int dac_scan_step_default = 1;
 
 int dac_center = dac_center_default; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
@@ -69,8 +69,8 @@ int dac_scan_range = dac_scan_range_default;  // scan range
 int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
-int transmission_threshold = 30;  // counts
-int transmission_threshold_max = 200;  // counts
+int transmission_threshold = 35;  // counts
+int transmission_threshold_max = 100;  // counts
 int trans_global = 0;
 
 
@@ -85,18 +85,6 @@ int lock_state;
 #define LOCK_NOT_ACQUIRED   0x01
 #define LOCK_ACQUIRED       0x02
 
-
-int setS1(String state) {
-    if(state == "HIGH") {
-        digitalWrite(S1_input, HIGH);
-        return 1;
-    }
-    else if (state == "LOW") {
-        digitalWrite(S1_input, LOW);
-        return 0;
-    }
-
-}
 
 void setup() {
     // Read the analog pins once to set them to input mode
@@ -136,11 +124,6 @@ void setup() {
     ds2_state = digitalRead(DS2);
     ds3_state = digitalRead(DS3);
 
-
-    // register setS1 function to the cloud
-    Particle.function("setS1", setS1);
-    Particle.variable("dac_word", &dac_word, INT);
-
     if(ds1_state==HIGH) {
         WiFi.on();
         Particle.connect();
@@ -154,8 +137,8 @@ void setup() {
 }
 
 void loop() {
-    // Check whether DS1 switch has been flipped.
     bool ds1_state_new = digitalRead(DS1);
+    // Check whether DS1 switch has been flipped.
     if(ds1_state_new != ds1_state) {
         ds1_state = ds1_state_new;
         if(ds1_state) {
@@ -168,72 +151,20 @@ void loop() {
         }
     }
 
-    ds3_state = digitalRead(DS3);
-    // scan if switch is on and lock has not been acquired
-    if(ds3_state == HIGH && lock_state!=LOCK_ACQUIRED) {
-        dac_scan_value += dac_scan_step;
-        if(dac_scan_value >= dac_scan_range) {
-            // this is the end of one scan cycle
-            if(lock_state==LOCK_NOT_ACQUIRED) {
-                // we are still searching for the transmission and did not
-                // find it in this range, hence widen the scan range
-                dac_scan_range *=2;
-                if(dac_scan_value > 1000) {
-                    // do not exceed half range
-                    dac_scan_range = 1000;
-                }
-            }
-            dac_scan_value = -dac_scan_range;
-        }
-        dac_word = dac_center + dac_scan_value;
-        delay(1);
-    }
-    // if scanning has been switched off, then recenter
-    else if(ds3_state == LOW) {
-        dac_word = dac_center;
-        dac_scan_range = dac_scan_range_default;
-    }
+    // test 1: switch off input by sending high here
+    // digitalWrite(S1_input, HIGH);
 
-    // update DAC only when scanning. Since writing to DAC introduces
-    // glitches in the output voltage, we avoid it when the laser is locked
-    if(lock_state != LOCK_ACQUIRED)
-        analogWrite(DAC1, dac_word);
+    // test 2: switch off input by sending high here
+    // digitalWrite(S3_output_enable, HIGH);
 
-    // check if transmission exceeds threshold
-    // set state to LOCK_ACQUIRED if it does and if we want to lock
-    trans_global = analogRead(transmission);
-    bool lock_condition = (trans_global > transmission_threshold)
-                          && (trans_global < transmission_threshold_max);
-    if(lock_condition == false && lock_state==LOCK_ACQUIRED) {
-        // we just lost lock in this round
-        // start with a small scan range
-        dac_scan_range = 8;
-    }
-    // attempt locking only if ds2 is high
-    // start with assumption that lock has not been acquired
-    bool ds2_state = digitalRead(DS2);
-    if(ds2_state == HIGH) {
-        lock_state = LOCK_NOT_ACQUIRED;
-    }
-    else {
-        lock_state = LOCK_NOT_ATTEMPTING;
-        // reset the scan range if we don't want to attempt locking
-        dac_scan_range = dac_scan_range_default;
-    }
+    // test3: current integrator
+    // digitalWrite(S2_curr_int, HIGH);
 
-    if(lock_condition && lock_state!=LOCK_NOT_ATTEMPTING)
-        lock_state = LOCK_ACQUIRED;
+    // test4: piezo input
+    // digitalWrite(S4_piezo_enable, HIGH);
 
-    if(lock_state==LOCK_ACQUIRED) {
-        digitalWrite(S2_curr_int, HIGH);
-        digitalWrite(S5_piezo_int, HIGH);
-        dac_scan_range = dac_scan_range_default;
-    }
-    else {
-        digitalWrite(S2_curr_int, LOW);
-        digitalWrite(S5_piezo_int, LOW);
-    }
-    // turn of input temporarily
-    //digitalWrite(S1_input, HIGH);
-    //digitalWrite(S4_piezo_enable, HIGH);
+    // test5: piezo integrator
+    // digitalWrite(S5_piezo_int, HIGH);
+
+
 }
