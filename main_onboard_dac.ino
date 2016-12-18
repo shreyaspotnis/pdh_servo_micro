@@ -61,7 +61,7 @@ int SS_SPI = D5;
 
 int dac_center_default = 2048;
 int dac_scan_range_default = 150;  // scan range
-int dac_scan_step_default = 2;
+int dac_scan_step_default = 1;
 
 int dac_center = dac_center_default; // center value around which to scan
 int dac_word = dac_center;  // actual dac value written
@@ -93,6 +93,54 @@ int setS1(String state) {
     }
     else if (state == "LOW") {
         digitalWrite(S1_input, LOW);
+        return 0;
+    }
+
+}
+
+int setS3(String state) {
+    if(state == "HIGH") {
+        digitalWrite(S3_output_enable, HIGH);
+        return 1;
+    }
+    else if (state == "LOW") {
+        digitalWrite(S3_output_enable, LOW);
+        return 0;
+    }
+
+}
+
+int setS4(String state) {
+    if(state == "HIGH") {
+        digitalWrite(S4_piezo_enable, HIGH);
+        return 1;
+    }
+    else if (state == "LOW") {
+        digitalWrite(S4_piezo_enable, LOW);
+        return 0;
+    }
+
+}
+
+int setS6(String state) {
+    if(state == "HIGH") {
+        digitalWrite(S6_piezo_offset, HIGH);
+        return 1;
+    }
+    else if (state == "LOW") {
+        digitalWrite(S6_piezo_offset, LOW);
+        return 0;
+    }
+
+}
+
+int setS5(String state) {
+    if(state == "HIGH") {
+        digitalWrite(S5_piezo_int, HIGH);
+        return 1;
+    }
+    else if (state == "LOW") {
+        digitalWrite(S5_piezo_int, LOW);
         return 0;
     }
 
@@ -139,6 +187,10 @@ void setup() {
 
     // register setS1 function to the cloud
     Particle.function("setS1", setS1);
+    Particle.function("setS3", setS3);
+    Particle.function("setS4", setS4);
+    Particle.function("setS5", setS5);
+    Particle.function("setS6", setS6);
     Particle.variable("dac_word", &dac_word, INT);
 
     if(ds1_state==HIGH) {
@@ -185,8 +237,9 @@ void loop() {
             }
             dac_scan_value = -dac_scan_range;
         }
+        else
         dac_word = dac_center + dac_scan_value;
-        delay(1);
+        delayMicroseconds(500);
     }
     // if scanning has been switched off, then recenter
     else if(ds3_state == LOW) {
@@ -233,7 +286,4 @@ void loop() {
         digitalWrite(S2_curr_int, LOW);
         digitalWrite(S5_piezo_int, LOW);
     }
-    // turn of input temporarily
-    //digitalWrite(S1_input, HIGH);
-    //digitalWrite(S4_piezo_enable, HIGH);
 }
