@@ -69,10 +69,11 @@ int dac_scan_range = dac_scan_range_default;  // scan range
 int dac_scan_step = dac_scan_step_default;
 int dac_scan_value = -dac_scan_range;
 
-int transmission_threshold = 30;  // counts
-int transmission_threshold_max = 200;  // counts
+int transmission_threshold = 15;  // counts
+int transmission_threshold_max = 2000;  // counts
 int trans_global = 0;
 
+int time_when_lock_acquired = 0;
 
 // globals
 bool ds1_state;
@@ -80,6 +81,10 @@ bool ds2_state;
 bool ds3_state;
 
 int lock_state;
+int previous_lock_state;
+
+bool force_unlock;
+
 // lock state can be in any of the following
 #define LOCK_NOT_ATTEMPTING 0x00
 #define LOCK_NOT_ACQUIRED   0x01
@@ -203,9 +208,12 @@ void setup() {
 
     }
     lock_state = LOCK_NOT_ATTEMPTING;
+    previous_lock_state = LOCK_NOT_ATTEMPTING;
+    force_unlock = false;
 }
 
 void loop() {
+    previous_lock_state = lock_state;
     // Check whether DS1 switch has been flipped.
     bool ds1_state_new = digitalRead(DS1);
     if(ds1_state_new != ds1_state) {
@@ -274,8 +282,35 @@ void loop() {
         dac_scan_range = dac_scan_range_default;
     }
 
-    if(lock_condition && lock_state!=LOCK_NOT_ATTEMPTING)
-        lock_state = LOCK_ACQUIRED;
+    if(lock_condition && lock_state!=LOCK_NOT_ATTEMPTING) {
+
+        if(force_unlock) {
+            lock_state = LOCK_NOT_ACQUIRED;
+            analogWrite(DAC1, dac_word+10);
+        }
+        else {
+            lock_state = LOCK_ACQUIRED;
+
+            // // if measuring cavity ring down, start counting time
+            // if (previous_lock_state != LOCK_ACQUIRED) {
+            //     // we just acquired lock, start counting time
+            //     time_when_lock_acquired = Time.now();
+            // }
+            // if(Time.now() - time_when_lock_acquired > 1) {
+            //     // we have a lock for 2 seconds
+            //     // force unlock
+            //     force_unlock = true;
+            // }
+
+        }
+
+
+
+    }
+
+    // if(Time.now() - time_when_lock_acquired > 2) {
+    //     force_unlock = false;
+    // }
 
     if(lock_state==LOCK_ACQUIRED) {
         digitalWrite(S2_curr_int, HIGH);
